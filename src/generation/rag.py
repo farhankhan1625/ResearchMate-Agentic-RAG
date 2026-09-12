@@ -1,7 +1,10 @@
+from src.retrieval.retriever import retrieve_documents
 from langchain_ollama import ChatOllama
 
-from src.retrieval.retriever import retrieve_documents
 
+# --------------------------------------------------
+# LOCAL LLM
+# --------------------------------------------------
 
 llm = ChatOllama(
     model="llama3.2",
@@ -9,86 +12,117 @@ llm = ChatOllama(
 )
 
 
-def answer_question(query):
-    docs = retrieve_documents(query, k=3)
+# --------------------------------------------------
+# RAG ANSWER FUNCTION
+# --------------------------------------------------
 
+def answer_question(query, k=10):
+
+    # Retrieve relevant document chunks
+    docs = retrieve_documents(
+        query,
+        k=k
+    )
+
+    # Relevance guard
     if not docs:
         return (
             "I could not find relevant information in the provided document.",
             []
         )
 
-    context_parts = []
+    # Combine retrieved chunks
+    context = "\n\n".join(
+        doc.page_content
+        for doc in docs
+    )
 
-    for i, doc in enumerate(docs, 1):
-        source = doc.metadata.get("source", "Unknown")
-        page = doc.metadata.get("page_label", "Unknown")
-
-        context_parts.append(
-            f"[Source {i} | Page {page}]\n"
-            f"{doc.page_content}"
-        )
-
-    context = "\n\n".join(context_parts)
-
+    # Prompt
     prompt = f"""
-You are ResearchMate, a research assistant.
+You are ResearchMate, a research document assistant.
 
-Answer the question using ONLY the provided context.
+Answer the user's question using ONLY the information
+contained in the provided document context.
 
 Rules:
-1. Do not use outside knowledge.
-2. If the answer is not supported by the context, say:
-"I could not find the answer in the provided document."
-3. Keep the answer concise and factual.
-4. Mention the relevant source/page when possible.
-
-CONTEXT:
+Rules:
+1. Answer using only the provided document context.
+2. Do not use outside knowledge.
+3. Do not invent facts or numerical values.
+4. You may calculate derived values when the required numerical values are present in the document context.
+5. If the question asks for an average, total, difference, percentage, or similar calculation, perform the calculation using the relevant values from the context.
+6. Show the calculation briefly and give the final result with units.
+7. If the required information is genuinely missing from the context, say:
+   "I could not find the answer in the provided document."
+8. Give a concise and direct answer.
+Document Context:
+-----------------
 {context}
+-----------------
 
-QUESTION:
+User Question:
 {query}
 
-ANSWER:
+Answer:
 """
 
+    # Generate answer using local Llama 3.2
     response = llm.invoke(prompt)
 
-    return response.content, docs
+    answer = response.content
 
+    return answer, docs
+
+
+# --------------------------------------------------
+# CLI TEST
+# --------------------------------------------------
 
 if __name__ == "__main__":
 
     print("=" * 60)
     print("RESEARCHMATE - LOCAL RAG ASSISTANT")
     print("=" * 60)
-    print("Ask questions about your documents.")
-    print("Type 'exit' to stop.\n")
 
     while True:
 
-        question = input("You: ")
+        query = input("\nYou: ")
 
-        if question.lower() == "exit":
-            print("\nGoodbye!")
+        if query.lower() in ["exit", "quit"]:
+
+            print("\nResearchMate: Goodbye!")
             break
 
-        if not question.strip():
-            continue
-
-        answer, docs = answer_question(question)
+        answer, docs = answer_question(query)
 
         print("\nResearchMate:")
         print(answer)
 
         print("\nSources:")
 
-        for i, doc in enumerate(docs, 1):
-            print(
-                f"{i}. "
-                f"{doc.metadata.get('source', 'Unknown')} | "
-                f"Page: {doc.metadata.get('page_label', 'Unknown')}"
-            )
+        if docs:
 
-        print("\n" + "-" * 60 + "\n")
-        
+            for i, doc in enumerate(docs, 1):
+
+                source = doc.metadata.get(
+                    "source",
+                    "Unknown"
+                )
+
+                page = doc.metadata.get(
+                    "page_label",
+                    doc.metadata.get(
+                        "page",
+                        "Unknown"
+                    )
+                )
+
+                print(
+                    f"{i}. {source} | Page: {page}"
+                )
+
+        else:
+
+            print("No relevant sources found.")
+
+        print("\n" + "-" * 60)

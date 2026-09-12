@@ -12,9 +12,7 @@ vectorstore = Chroma(
     persist_directory="data/chroma_db",
     embedding_function=embeddings
 )
-
-
-def retrieve_documents(query, k=3, max_distance=1.5):
+def retrieve_documents(query, k=10, max_distance=1.8):
     """Retrieve relevant document chunks using a distance threshold."""
 
     results = vectorstore.similarity_search_with_score(
